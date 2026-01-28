@@ -74,22 +74,13 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-bazel-clang18-
 
-      - name: Configure Bazel toolchain
-        working-directory: backend
-        env:
-          CC: clang-18
-          CXX: clang++-18
-        run: |
-          # Force re-detection of C++ toolchain with Clang 18
-          bazel clean --expunge 2>/dev/null || true
-          bazel version
-
       - name: Build backend
         working-directory: backend
         env:
           CC: clang-18
           CXX: clang++-18
         run: |
+          bazel clean --expunge 2>/dev/null || true
           bazel build //... --jobs=auto
 
       - name: Run tests
