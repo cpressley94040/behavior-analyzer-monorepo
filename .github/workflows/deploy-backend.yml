@@ -74,6 +74,13 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-bazel-
 
+      - name: Verify C++23 support
+        run: |
+          echo '#include <expected>' | clang++-18 -std=c++23 -x c++ -fsyntax-only - && echo "C++23 expected: OK" || echo "C++23 expected: FAIL"
+          echo '#include <format>' | clang++-18 -std=c++23 -x c++ -fsyntax-only - && echo "C++23 format: OK" || echo "C++23 format: FAIL"
+          clang++-18 --version
+          dpkg -l | grep libstdc++ | head -5
+
       - name: Build backend
         working-directory: backend
         env:
