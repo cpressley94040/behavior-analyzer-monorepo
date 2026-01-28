@@ -1,0 +1,37 @@
+{
+  "name": "behavior-analyzer-infrastructure",
+  "version": "0.1.0",
+  "description": "AWS CDK infrastructure for Behavior Analyzer",
+  "private": true,
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w",
+    "test": "jest",
+    "cdk": "cdk",
+    "synth": "cdk synth",
+    "deploy": "cdk deploy --all",
+    "deploy:network": "cdk deploy BehaviorAnalyzerNetworkStack",
+    "deploy:data": "cdk deploy BehaviorAnalyzerDataStack",
+    "deploy:streaming": "cdk deploy BehaviorAnalyzerStreamingStack",
+    "deploy:compute": "cdk deploy BehaviorAnalyzerComputeStack",
+    "destroy": "cdk destroy --all",
+    "diff": "cdk diff",
+    "bootstrap": "cdk bootstrap"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "^2.120.0",
+    "constructs": "^10.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "aws-cdk": "^2.120.0",
+    "typescript": "^5.3.0",
+    "ts-node": "^10.9.0",
+    "jest": "^29.7.0",
+    "@types/jest": "^29.5.0",
+    "ts-jest": "^29.1.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

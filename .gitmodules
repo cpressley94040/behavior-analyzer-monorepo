@@ -1,0 +1,12 @@
+[submodule "backend"]
+	path = backend
+	url = https://github.com/cpressley94040/BehaviorAnalyzerBackend.git
+[submodule "kore"]
+	path = kore
+	url = https://github.com/cpressley94040/Kore.git
+[submodule "frontend"]
+	path = frontend
+	url = https://github.com/cpressley94040/BehaviorAnalyzer.git
+[submodule "games/rust_plugin"]
+	path = games/rust_plugin
+	url = https://github.com/cpressley94040/BehaviorAnalyzerRustPlugin.git
