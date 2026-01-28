@@ -70,16 +70,9 @@ jobs:
           path: |
             ~/.cache/bazel
             ~/.cache/bazelisk
-          key: ${{ runner.os }}-bazel-${{ hashFiles('backend/MODULE.bazel', 'backend/.bazelrc') }}
+          key: ${{ runner.os }}-bazel-clang18-${{ hashFiles('backend/MODULE.bazel', 'backend/.bazelrc') }}
           restore-keys: |
-            ${{ runner.os }}-bazel-
-
-      - name: Verify C++23 support
-        run: |
-          echo '#include <expected>' | clang++-18 -std=c++23 -x c++ -fsyntax-only - && echo "C++23 expected: OK" || echo "C++23 expected: FAIL"
-          echo '#include <format>' | clang++-18 -std=c++23 -x c++ -fsyntax-only - && echo "C++23 format: OK" || echo "C++23 format: FAIL"
-          clang++-18 --version
-          dpkg -l | grep libstdc++ | head -5
+            ${{ runner.os }}-bazel-clang18-
 
       - name: Build backend
         working-directory: backend
@@ -87,23 +80,31 @@ jobs:
           CC: clang-18
           CXX: clang++-18
         run: |
-          bazel clean --expunge
-          bazel build //include/distributed:curl_dynamo_connection --jobs=auto -s 2>&1 | tail -100
+          bazel build //... --jobs=auto
 
       - name: Run tests
         working-directory: backend
+        env:
+          CC: clang-18
+          CXX: clang++-18
         run: |
-          CC=clang-18 CXX=clang++-18 bazel test //test:all --test_output=errors --cxxopt=-std=c++23 --host_cxxopt=-std=c++23
+          bazel test //test:all --test_output=errors
 
       - name: Check formatting
         working-directory: backend
+        env:
+          CC: clang-18
+          CXX: clang++-18
         run: |
-          CC=clang-18 CXX=clang++-18 bazel run //tools:format_check || echo "Format check failed - please run bazel run //tools:format"
+          bazel run //tools:format_check || echo "Format check failed - please run bazel run //tools:format"
 
       - name: Build release binary
         working-directory: backend
+        env:
+          CC: clang-18
+          CXX: clang++-18
         run: |
-          CC=clang-18 CXX=clang++-18 bazel build -c opt //src/server:behavior_analyzer_server --cxxopt=-std=c++23 --host_cxxopt=-std=c++23
+          bazel build -c opt //src/server:behavior_analyzer_server
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
