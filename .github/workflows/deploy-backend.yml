@@ -81,7 +81,11 @@ jobs:
           CXX: clang++-18
         run: |
           bazel clean --expunge 2>/dev/null || true
-          bazel build //... --jobs=auto
+          cat .bazelrc | head -20
+          echo "---"
+          bazel info workspace 2>&1 | head -5
+          echo "---"
+          bazel build //include/distributed:dynamo_client --jobs=auto -s 2>&1 | head -100
 
       - name: Run tests
         working-directory: backend
