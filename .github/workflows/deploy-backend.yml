@@ -55,7 +55,11 @@ jobs:
           submodules: recursive
 
       - name: Install system dependencies
-        run: sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libcurl4-openssl-dev clang-18 libc++-18-dev libc++abi-18-dev
+          sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-18 100
+          sudo update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-18 100
 
       - name: Set up Bazelisk
         uses: bazelbuild/setup-bazelisk@v3
