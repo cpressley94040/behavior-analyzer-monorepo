@@ -76,23 +76,26 @@ jobs:
 
       - name: Build backend
         working-directory: backend
+        env:
+          CC: clang-18
+          CXX: clang++-18
         run: |
-          bazel build //... --jobs=auto
+          bazel build //... --jobs=auto --repo_env=CC=clang-18 --repo_env=CXX=clang++-18
 
       - name: Run tests
         working-directory: backend
         run: |
-          bazel test //test:all --test_output=errors
+          bazel test //test:all --test_output=errors --repo_env=CC=clang-18 --repo_env=CXX=clang++-18
 
       - name: Check formatting
         working-directory: backend
         run: |
-          bazel run //tools:format_check || echo "Format check failed - please run bazel run //tools:format"
+          bazel run //tools:format_check --repo_env=CC=clang-18 --repo_env=CXX=clang++-18 || echo "Format check failed - please run bazel run //tools:format"
 
       - name: Build release binary
         working-directory: backend
         run: |
-          bazel build -c opt //src/server:behavior_analyzer_server
+          bazel build -c opt //src/server:behavior_analyzer_server --repo_env=CC=clang-18 --repo_env=CXX=clang++-18
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
