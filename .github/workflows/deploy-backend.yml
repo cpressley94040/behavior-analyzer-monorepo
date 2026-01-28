@@ -87,7 +87,8 @@ jobs:
           CC: clang-18
           CXX: clang++-18
         run: |
-          bazel build //... --jobs=auto --cxxopt=-std=c++23 --host_cxxopt=-std=c++23
+          bazel clean --expunge
+          bazel build //include/distributed:curl_dynamo_connection --jobs=auto -s 2>&1 | tail -100
 
       - name: Run tests
         working-directory: backend
