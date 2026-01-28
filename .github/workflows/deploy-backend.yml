@@ -54,6 +54,9 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev
+
       - name: Set up Bazelisk
         uses: bazelbuild/setup-bazelisk@v3
 
