@@ -80,12 +80,12 @@ jobs:
           CC: clang-18
           CXX: clang++-18
         run: |
-          bazel build //... --jobs=auto --repo_env=CC=clang-18 --repo_env=CXX=clang++-18
+          bazel build //... --jobs=auto --repo_env=CC=clang-18 --repo_env=CXX=clang++-18 --cxxopt=-std=c++23 --host_cxxopt=-std=c++23
 
       - name: Run tests
         working-directory: backend
         run: |
-          bazel test //test:all --test_output=errors --repo_env=CC=clang-18 --repo_env=CXX=clang++-18
+          bazel test //test:all --test_output=errors --repo_env=CC=clang-18 --repo_env=CXX=clang++-18 --cxxopt=-std=c++23 --host_cxxopt=-std=c++23
 
       - name: Check formatting
         working-directory: backend
@@ -95,7 +95,7 @@ jobs:
       - name: Build release binary
         working-directory: backend
         run: |
-          bazel build -c opt //src/server:behavior_analyzer_server --repo_env=CC=clang-18 --repo_env=CXX=clang++-18
+          bazel build -c opt //src/server:behavior_analyzer_server --repo_env=CC=clang-18 --repo_env=CXX=clang++-18 --cxxopt=-std=c++23 --host_cxxopt=-std=c++23
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
