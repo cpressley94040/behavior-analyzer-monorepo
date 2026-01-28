@@ -81,7 +81,7 @@ jobs:
           CXX: clang++-18
         run: |
           bazel clean --expunge 2>/dev/null || true
-          bazel build //... --jobs=auto
+          bazel build //... --jobs=auto --cxxopt=-std=c++23 --host_cxxopt=-std=c++23
 
       - name: Run tests
         working-directory: backend
@@ -90,6 +90,7 @@ jobs:
           CXX: clang++-18
         run: |
           bazel test //test:all --test_output=errors \
+            --cxxopt=-std=c++23 --host_cxxopt=-std=c++23 \
             --test_tag_filters=-flaky \
             || echo "::warning::Some tests failed - check test output above"
 
@@ -99,7 +100,7 @@ jobs:
           CC: clang-18
           CXX: clang++-18
         run: |
-          bazel run //tools:format_check || echo "Format check failed - please run bazel run //tools:format"
+          bazel run //tools:format_check --cxxopt=-std=c++23 --host_cxxopt=-std=c++23 || echo "Format check failed - please run bazel run //tools:format"
 
       - name: Build release binary
         working-directory: backend
@@ -107,7 +108,7 @@ jobs:
           CC: clang-18
           CXX: clang++-18
         run: |
-          bazel build -c opt //src/server:behavior_analyzer_server
+          bazel build -c opt //src/server:behavior_analyzer_server --cxxopt=-std=c++23 --host_cxxopt=-std=c++23
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
