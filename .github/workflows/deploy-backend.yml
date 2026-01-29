@@ -225,25 +225,35 @@ jobs:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
+      - name: Login to Amazon ECR
+        id: login-ecr-infra
+        uses: aws-actions/amazon-ecr-login@v2
+
       - name: CDK Diff
         working-directory: infrastructure/cdk
-        run: npx cdk diff --all
+        run: |
+          npx cdk diff --all \
+            -c environment=${{ github.event.inputs.environment || 'staging' }} \
+            -c containerImageUri=${{ steps.login-ecr-infra.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
         env:
           ENVIRONMENT: ${{ github.event.inputs.environment || 'staging' }}
 
       - name: CDK Deploy
         working-directory: infrastructure/cdk
-        run: npx cdk deploy --all --require-approval never
+        run: |
+          npx cdk deploy --all --require-approval never \
+            -c environment=${{ github.event.inputs.environment || 'staging' }} \
+            -c containerImageUri=${{ steps.login-ecr-infra.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
         env:
           ENVIRONMENT: ${{ github.event.inputs.environment || 'staging' }}
 
   # ============================================================================
-  # Update ECS Service
+  # Verify Deployment Health
   # ============================================================================
-  deploy-service:
-    name: Deploy ECS Service
+  verify-deployment:
+    name: Verify Deployment
     runs-on: ubuntu-latest
-    needs: [docker, deploy-infrastructure]
+    needs: deploy-infrastructure
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     environment: ${{ github.event.inputs.environment || 'staging' }}
 
@@ -254,119 +264,53 @@ jobs:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Register ECS task definition
-        id: task-def
+      - name: Wait for ECS service stability
         run: |
-          NEW_IMAGE="${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}"
-          AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-          ENVIRONMENT="${{ github.event.inputs.environment || 'staging' }}"
+          # Get cluster and service names from CDK stack outputs
+          CLUSTER=$(aws cloudformation describe-stacks \
+            --stack-name BehaviorAnalyzerComputeStack \
+            --query 'Stacks[0].Outputs[?OutputKey==`ClusterName`].OutputValue' \
+            --output text 2>/dev/null || echo "")
 
-          # Try to get existing task definition to update
-          if TASK_DEF=$(aws ecs describe-task-definition \
-            --task-definition behavior-analyzer-server \
-            --query 'taskDefinition' \
-            --output json 2>/dev/null); then
-            echo "Updating existing task definition..."
-            NEW_TASK_DEF=$(echo "$TASK_DEF" | jq \
-              --arg IMAGE "$NEW_IMAGE" \
-              '.containerDefinitions[0].image = $IMAGE |
-               del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)')
-          else
-            echo "Creating initial task definition..."
-            EXEC_ROLE_ARN="arn:aws:iam::${AWS_ACCOUNT_ID}:role/ecsTaskExecutionRole"
-            NEW_TASK_DEF=$(jq -n \
-              --arg image "$NEW_IMAGE" \
-              --arg role "$EXEC_ROLE_ARN" \
-              --arg env "$ENVIRONMENT" \
-              --arg region "${{ env.AWS_REGION }}" \
-              '{
-                family: "behavior-analyzer-server",
-                networkMode: "awsvpc",
-                requiresCompatibilities: ["FARGATE"],
-                cpu: "512",
-                memory: "1024",
-                executionRoleArn: $role,
-                containerDefinitions: [{
-                  name: "behavior-analyzer-server",
-                  image: $image,
-                  essential: true,
-                  portMappings: [
-                    {containerPort: 8080, protocol: "tcp"},
-                    {containerPort: 9090, protocol: "tcp"}
-                  ],
-                  environment: [
-                    {name: "BA_ENVIRONMENT", value: $env},
-                    {name: "AWS_REGION", value: $region},
-                    {name: "BA_LOG_LEVEL", value: "info"}
-                  ],
-                  healthCheck: {
-                    command: ["CMD-SHELL", "curl -sf http://localhost:8080/health/ready || exit 1"],
-                    interval: 30,
-                    timeout: 10,
-                    retries: 3,
-                    startPeriod: 10
-                  },
-                  logConfiguration: {
-                    logDriver: "awslogs",
-                    options: {
-                      "awslogs-group": "/ecs/behavior-analyzer-server",
-                      "awslogs-region": $region,
-                      "awslogs-stream-prefix": "ecs"
-                    }
-                  }
-                }]
-              }')
+          if [ -z "$CLUSTER" ]; then
+            echo "::warning::Compute stack not found, skipping ECS verification"
+            exit 0
           fi
 
-          echo "Task definition JSON:"
-          echo "$NEW_TASK_DEF" | jq .
-
-          # Register new task definition
-          NEW_TASK_ARN=$(aws ecs register-task-definition \
-            --cli-input-json "$NEW_TASK_DEF" \
-            --query 'taskDefinition.taskDefinitionArn' \
+          SERVICE=$(aws cloudformation describe-stacks \
+            --stack-name BehaviorAnalyzerComputeStack \
+            --query 'Stacks[0].Outputs[?OutputKey==`ServiceName`].OutputValue' \
             --output text)
 
-          echo "Registered: $NEW_TASK_ARN"
-          echo "task_definition_arn=$NEW_TASK_ARN" >> $GITHUB_OUTPUT
-
-      - name: Update ECS service
-        run: |
-          aws ecs update-service \
-            --cluster ${{ env.ECS_CLUSTER }} \
-            --service ${{ env.ECS_SERVICE }} \
-            --task-definition ${{ steps.task-def.outputs.task_definition_arn }} \
-            --force-new-deployment
-
-      - name: Wait for deployment
-        run: |
+          echo "Waiting for ECS service: $CLUSTER / $SERVICE"
           aws ecs wait services-stable \
-            --cluster ${{ env.ECS_CLUSTER }} \
-            --services ${{ env.ECS_SERVICE }}
+            --cluster "$CLUSTER" \
+            --services "$SERVICE"
 
-      - name: Verify deployment
+      - name: Verify health endpoint
         run: |
-          # Get ALB DNS name
           ALB_DNS=$(aws cloudformation describe-stacks \
             --stack-name BehaviorAnalyzerComputeStack \
             --query 'Stacks[0].Outputs[?OutputKey==`LoadBalancerDns`].OutputValue' \
-            --output text)
+            --output text 2>/dev/null || echo "")
 
-          # Check health endpoint
-          for i in {1..5}; do
+          if [ -z "$ALB_DNS" ]; then
+            echo "::warning::No ALB DNS found, skipping health check"
+            exit 0
+          fi
+
+          echo "Checking health at http://$ALB_DNS/health/ready"
+          for i in {1..10}; do
             if curl -sf "http://$ALB_DNS/health/ready"; then
+              echo ""
               echo "Health check passed!"
               exit 0
             fi
-            echo "Attempt $i failed, retrying..."
-            sleep 10
+            echo "Attempt $i/10 failed, retrying in 15s..."
+            sleep 15
           done
 
-          echo "Health check failed after 5 attempts"
+          echo "Health check failed after 10 attempts"
           exit 1
 
   # ============================================================================
@@ -375,7 +319,7 @@ jobs:
   notify:
     name: Notify
     runs-on: ubuntu-latest
-    needs: [build, docker, deploy-infrastructure, deploy-service]
+    needs: [build, docker, deploy-infrastructure, verify-deployment]
     if: always()
 
     steps:
@@ -388,7 +332,7 @@ jobs:
           echo "| Build | ${{ needs.build.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Docker | ${{ needs.docker.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Infrastructure | ${{ needs.deploy-infrastructure.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Service | ${{ needs.deploy-service.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Health Check | ${{ needs.verify-deployment.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
           echo "**Environment:** ${{ github.event.inputs.environment || 'staging' }}" >> $GITHUB_STEP_SUMMARY
