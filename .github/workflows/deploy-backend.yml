@@ -262,6 +262,8 @@ jobs:
         id: task-def
         run: |
           NEW_IMAGE="${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}"
+          AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          ENVIRONMENT="${{ github.event.inputs.environment || 'staging' }}"
 
           # Try to get existing task definition to update
           if TASK_DEF=$(aws ecs describe-task-definition \
@@ -275,47 +277,53 @@ jobs:
                del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)')
           else
             echo "Creating initial task definition..."
-            NEW_TASK_DEF=$(cat <<TASKDEF
-          {
-            "family": "behavior-analyzer-server",
-            "networkMode": "awsvpc",
-            "requiresCompatibilities": ["FARGATE"],
-            "cpu": "512",
-            "memory": "1024",
-            "executionRoleArn": "arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/ecsTaskExecutionRole",
-            "containerDefinitions": [{
-              "name": "behavior-analyzer-server",
-              "image": "${NEW_IMAGE}",
-              "essential": true,
-              "portMappings": [
-                {"containerPort": 8080, "protocol": "tcp"},
-                {"containerPort": 9090, "protocol": "tcp"}
-              ],
-              "environment": [
-                {"name": "BA_ENVIRONMENT", "value": "${{ github.event.inputs.environment || 'staging' }}"},
-                {"name": "AWS_REGION", "value": "${{ env.AWS_REGION }}"},
-                {"name": "BA_LOG_LEVEL", "value": "info"}
-              ],
-              "healthCheck": {
-                "command": ["CMD-SHELL", "curl -sf http://localhost:8080/health/ready || exit 1"],
-                "interval": 30,
-                "timeout": 10,
-                "retries": 3,
-                "startPeriod": 10
-              },
-              "logConfiguration": {
-                "logDriver": "awslogs",
-                "options": {
-                  "awslogs-group": "/ecs/behavior-analyzer-server",
-                  "awslogs-region": "${{ env.AWS_REGION }}",
-                  "awslogs-stream-prefix": "ecs"
-                }
-              }
-            }]
-          }
-          TASKDEF
-          )
+            EXEC_ROLE_ARN="arn:aws:iam::${AWS_ACCOUNT_ID}:role/ecsTaskExecutionRole"
+            NEW_TASK_DEF=$(jq -n \
+              --arg image "$NEW_IMAGE" \
+              --arg role "$EXEC_ROLE_ARN" \
+              --arg env "$ENVIRONMENT" \
+              --arg region "${{ env.AWS_REGION }}" \
+              '{
+                family: "behavior-analyzer-server",
+                networkMode: "awsvpc",
+                requiresCompatibilities: ["FARGATE"],
+                cpu: "512",
+                memory: "1024",
+                executionRoleArn: $role,
+                containerDefinitions: [{
+                  name: "behavior-analyzer-server",
+                  image: $image,
+                  essential: true,
+                  portMappings: [
+                    {containerPort: 8080, protocol: "tcp"},
+                    {containerPort: 9090, protocol: "tcp"}
+                  ],
+                  environment: [
+                    {name: "BA_ENVIRONMENT", value: $env},
+                    {name: "AWS_REGION", value: $region},
+                    {name: "BA_LOG_LEVEL", value: "info"}
+                  ],
+                  healthCheck: {
+                    command: ["CMD-SHELL", "curl -sf http://localhost:8080/health/ready || exit 1"],
+                    interval: 30,
+                    timeout: 10,
+                    retries: 3,
+                    startPeriod: 10
+                  },
+                  logConfiguration: {
+                    logDriver: "awslogs",
+                    options: {
+                      "awslogs-group": "/ecs/behavior-analyzer-server",
+                      "awslogs-region": $region,
+                      "awslogs-stream-prefix": "ecs"
+                    }
+                  }
+                }]
+              }')
           fi
+
+          echo "Task definition JSON:"
+          echo "$NEW_TASK_DEF" | jq .
 
           # Register new task definition
           NEW_TASK_ARN=$(aws ecs register-task-definition \
@@ -323,6 +331,7 @@ jobs:
             --query 'taskDefinition.taskDefinitionArn' \
             --output text)
 
+          echo "Registered: $NEW_TASK_ARN"
           echo "task_definition_arn=$NEW_TASK_ARN" >> $GITHUB_OUTPUT
 
       - name: Update ECS service
