@@ -224,6 +224,7 @@ jobs:
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
+          role-duration-seconds: 7200
 
       - name: Login to Amazon ECR
         id: login-ecr-infra
@@ -238,10 +239,31 @@ jobs:
         env:
           ENVIRONMENT: ${{ github.event.inputs.environment || 'staging' }}
 
-      - name: CDK Deploy
+      - name: CDK Deploy - Serverless Stack
         working-directory: infrastructure/cdk
         run: |
-          npx cdk deploy --all --require-approval never \
+          npx cdk deploy "BehaviorAnalyzerServerless-*" --require-approval never \
+            -c environment=${{ github.event.inputs.environment || 'staging' }} \
+            -c containerImageUri=${{ steps.login-ecr-infra.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+        env:
+          ENVIRONMENT: ${{ github.event.inputs.environment || 'staging' }}
+
+      - name: Clean up failed stacks
+        run: |
+          for STACK in BehaviorAnalyzerComputeStack; do
+            STATUS=$(aws cloudformation describe-stacks --stack-name "$STACK" --query 'Stacks[0].StackStatus' --output text 2>/dev/null || echo "DOES_NOT_EXIST")
+            if [[ "$STATUS" == "ROLLBACK_COMPLETE" || "$STATUS" == "CREATE_FAILED" || "$STATUS" == "ROLLBACK_FAILED" ]]; then
+              echo "Deleting failed stack $STACK (status: $STATUS)"
+              aws cloudformation delete-stack --stack-name "$STACK"
+              aws cloudformation wait stack-delete-complete --stack-name "$STACK"
+            fi
+          done
+
+      - name: CDK Deploy - Compute Stack
+        working-directory: infrastructure/cdk
+        timeout-minutes: 30
+        run: |
+          npx cdk deploy BehaviorAnalyzerComputeStack --require-approval never \
             -c environment=${{ github.event.inputs.environment || 'staging' }} \
             -c containerImageUri=${{ steps.login-ecr-infra.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
         env:
