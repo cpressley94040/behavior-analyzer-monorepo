@@ -321,17 +321,8 @@ export class ComputeStack extends cdk.Stack {
       securityGroups: [serviceSecurityGroup],
       healthCheckGracePeriod: cdk.Duration.seconds(120),
       enableExecuteCommand: true, // Allows ECS Exec for debugging
-      minHealthyPercent: 100,
+      minHealthyPercent: 0,
       maxHealthyPercent: 200,
-      circuitBreaker: { enable: true, rollback: true },
-    });
-
-    // Prevent CloudFormation from waiting too long for service stability
-    // (avoids OIDC token expiry during first deployment)
-    const cfnService = this.service.node.defaultChild as ecs.CfnService;
-    cfnService.addPropertyOverride('DeploymentConfiguration.DeploymentCircuitBreaker', {
-      Enable: true,
-      Rollback: true,
     });
 
     this.service.attachToApplicationTargetGroup(targetGroup);
