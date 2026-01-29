@@ -81,7 +81,7 @@ jobs:
           CXX: clang++-18
         run: |
           bazel clean --expunge 2>/dev/null || true
-          bazel build //... --jobs=auto -- -//python/...
+          bazel build //... --jobs=auto -- -//python/... -//fuzz/...
 
       - name: Run tests
         working-directory: backend
