@@ -54,7 +54,9 @@ if (containerImageUri) {
     containerImageUri,
 
     // Configuration options
-    desiredCount: environment === 'prod' ? 2 : 1,
+    // desiredCount 0 allows CDK to create the stack without waiting for task stability.
+    // The verify-deployment job scales up and checks health.
+    desiredCount: 0,
     taskCpu: 1024,        // 1 vCPU
     taskMemoryMiB: 2048,  // 2 GB
     useDefaultVpc: true,  // Use default VPC to reduce costs
