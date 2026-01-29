@@ -299,7 +299,7 @@ jobs:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Scale up and wait for ECS service
+      - name: Attach target group, scale up, and wait
         timeout-minutes: 15
         run: |
           CLUSTER=$(aws cloudformation describe-stacks \
@@ -317,11 +317,19 @@ jobs:
             --query 'Stacks[0].Outputs[?OutputKey==`ServiceName`].OutputValue' \
             --output text)
 
-          echo "Scaling service to desiredCount=1: $CLUSTER / $SERVICE"
+          TG_ARN=$(aws cloudformation describe-stacks \
+            --stack-name BehaviorAnalyzerComputeStack \
+            --query 'Stacks[0].Outputs[?OutputKey==`TargetGroupArn`].OutputValue' \
+            --output text)
+
+          echo "Attaching target group and scaling service to 1"
           aws ecs update-service \
             --cluster "$CLUSTER" \
             --service "$SERVICE" \
-            --desired-count 1
+            --desired-count 1 \
+            --load-balancers "targetGroupArn=$TG_ARN,containerName=ServerContainer,containerPort=8080" \
+            --health-check-grace-period-seconds 120 \
+            --force-new-deployment
 
           echo "Waiting for ECS service stability..."
           aws ecs wait services-stable \

@@ -325,7 +325,9 @@ export class ComputeStack extends cdk.Stack {
       maxHealthyPercent: 200,
     });
 
-    this.service.attachToApplicationTargetGroup(targetGroup);
+    // NOTE: Target group attachment is done in the CI verify step via AWS CLI,
+    // not here. This avoids CloudFormation waiting for service stability
+    // during stack creation (which can exceed OIDC token lifetime).
 
     // =========================================================================
     // Outputs
@@ -363,6 +365,12 @@ export class ComputeStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'MetricsEndpoint', {
       value: `http://${this.loadBalancer.loadBalancerDnsName}:9090/metrics`,
       description: 'Prometheus metrics endpoint URL (requires port 9090 listener)',
+    });
+
+    new cdk.CfnOutput(this, 'TargetGroupArn', {
+      value: targetGroup.targetGroupArn,
+      description: 'Target group ARN for ECS service attachment',
+      exportName: `BehaviorAnalyzerTargetGroupArn-${environment}`,
     });
   }
 }
