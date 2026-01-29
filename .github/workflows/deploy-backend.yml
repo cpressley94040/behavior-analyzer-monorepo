@@ -57,7 +57,7 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libcurl4-openssl-dev clang-18
+          sudo apt-get install -y libcurl4-openssl-dev clang-18 libc++-18-dev libc++abi-18-dev
           sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-18 100
           sudo update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-18 100
 
@@ -79,7 +79,6 @@ jobs:
         env:
           CC: clang-18
           CXX: clang++-18
-          BAZEL_CXXOPTS: -std=c++23
         run: |
           bazel clean --expunge 2>/dev/null || true
           bazel build //... --jobs=auto
@@ -89,7 +88,6 @@ jobs:
         env:
           CC: clang-18
           CXX: clang++-18
-          BAZEL_CXXOPTS: -std=c++23
         run: |
           bazel test //test:all --test_output=errors \
             --test_tag_filters=-flaky \
@@ -100,7 +98,6 @@ jobs:
         env:
           CC: clang-18
           CXX: clang++-18
-          BAZEL_CXXOPTS: -std=c++23
         run: |
           bazel run //tools:format_check || echo "Format check failed - please run bazel run //tools:format"
 
@@ -109,7 +106,6 @@ jobs:
         env:
           CC: clang-18
           CXX: clang++-18
-          BAZEL_CXXOPTS: -std=c++23
         run: |
           bazel build -c opt //src/server:behavior_analyzer_server
 
