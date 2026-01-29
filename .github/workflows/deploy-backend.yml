@@ -248,10 +248,25 @@ jobs:
         env:
           ENVIRONMENT: ${{ github.event.inputs.environment || 'staging' }}
 
-      - name: Clean up failed stacks
+      - name: Wait for stacks to settle and clean up failures
+        timeout-minutes: 20
         run: |
           for STACK in BehaviorAnalyzerComputeStack; do
             STATUS=$(aws cloudformation describe-stacks --stack-name "$STACK" --query 'Stacks[0].StackStatus' --output text 2>/dev/null || echo "DOES_NOT_EXIST")
+            echo "Stack $STACK status: $STATUS"
+
+            # Wait for in-progress operations to complete
+            if [[ "$STATUS" == *"_IN_PROGRESS" ]]; then
+              echo "Waiting for $STACK to finish current operation..."
+              aws cloudformation wait stack-create-complete --stack-name "$STACK" 2>/dev/null \
+                || aws cloudformation wait stack-update-complete --stack-name "$STACK" 2>/dev/null \
+                || aws cloudformation wait stack-rollback-complete --stack-name "$STACK" 2>/dev/null \
+                || true
+              STATUS=$(aws cloudformation describe-stacks --stack-name "$STACK" --query 'Stacks[0].StackStatus' --output text 2>/dev/null || echo "DOES_NOT_EXIST")
+              echo "Stack $STACK now: $STATUS"
+            fi
+
+            # Delete stacks in terminal failed states
             if [[ "$STATUS" == "ROLLBACK_COMPLETE" || "$STATUS" == "CREATE_FAILED" || "$STATUS" == "ROLLBACK_FAILED" ]]; then
               echo "Deleting failed stack $STACK (status: $STATUS)"
               aws cloudformation delete-stack --stack-name "$STACK"
