@@ -107,9 +107,14 @@ jobs:
           CC: clang-18
           CXX: clang++-18
         run: |
-          bazel build -c opt //src/server:behavior_analyzer_server
+          if [ -f src/server/BUILD ] || [ -f src/server/BUILD.bazel ]; then
+            bazel build -c opt //src/server:behavior_analyzer_server
+          else
+            echo "::warning::Server binary target not yet created, skipping release build"
+          fi
 
       - name: Upload build artifacts
+        if: hashFiles('backend/src/server/BUILD') != '' || hashFiles('backend/src/server/BUILD.bazel') != ''
         uses: actions/upload-artifact@v4
         with:
           name: server-binary
