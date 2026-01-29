@@ -17,3 +17,6 @@ Thumbs.db
 
 # clangd
 .clangd
+
+# claude
+.claude/
