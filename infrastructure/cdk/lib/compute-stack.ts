@@ -108,7 +108,6 @@ export interface ComputeStackProps extends cdk.StackProps {
  */
 export class ComputeStack extends cdk.Stack {
   public readonly cluster: ecs.Cluster;
-  public readonly service: ecs.FargateService;
   public readonly loadBalancer: elbv2.ApplicationLoadBalancer;
   public readonly logGroup: logs.LogGroup;
 
@@ -309,29 +308,13 @@ export class ComputeStack extends cdk.Stack {
     });
 
     // =========================================================================
-    // ECS Fargate Service
-    // =========================================================================
-
-    this.service = new ecs.FargateService(this, 'Service', {
-      serviceName: `${serviceName}-${environment}`,
-      cluster: this.cluster,
-      taskDefinition,
-      desiredCount,
-      assignPublicIp: true, // Required for default VPC without NAT Gateway
-      securityGroups: [serviceSecurityGroup],
-      healthCheckGracePeriod: cdk.Duration.seconds(120),
-      enableExecuteCommand: true, // Allows ECS Exec for debugging
-      minHealthyPercent: 0,
-      maxHealthyPercent: 200,
-    });
-
-    // NOTE: Target group attachment is done in the CI verify step via AWS CLI,
-    // not here. This avoids CloudFormation waiting for service stability
-    // during stack creation (which can exceed OIDC token lifetime).
-
-    // =========================================================================
     // Outputs
     // =========================================================================
+    //
+    // NOTE: ECS Service is NOT created by CDK. CloudFormation waits
+    // indefinitely for ECS service stability, exceeding the OIDC token
+    // lifetime. The service is created/updated via AWS CLI in the CI
+    // deploy-service job instead.
 
     new cdk.CfnOutput(this, 'LoadBalancerDns', {
       value: this.loadBalancer.loadBalancerDnsName,
@@ -345,9 +328,21 @@ export class ComputeStack extends cdk.Stack {
       exportName: `BehaviorAnalyzerClusterName-${environment}`,
     });
 
+    new cdk.CfnOutput(this, 'TaskDefinitionArn', {
+      value: taskDefinition.taskDefinitionArn,
+      description: 'ECS Task Definition ARN',
+      exportName: `BehaviorAnalyzerTaskDefArn-${environment}`,
+    });
+
+    new cdk.CfnOutput(this, 'ServiceSecurityGroupId', {
+      value: serviceSecurityGroup.securityGroupId,
+      description: 'Security group ID for ECS service',
+      exportName: `BehaviorAnalyzerServiceSgId-${environment}`,
+    });
+
     new cdk.CfnOutput(this, 'ServiceName', {
-      value: this.service.serviceName,
-      description: 'ECS Service name',
+      value: `${serviceName}-${environment}`,
+      description: 'Expected ECS Service name (created via CLI)',
       exportName: `BehaviorAnalyzerServiceName-${environment}`,
     });
 
