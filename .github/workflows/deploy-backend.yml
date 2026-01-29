@@ -258,21 +258,64 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Update ECS task definition
+      - name: Register ECS task definition
         id: task-def
         run: |
-          # Get current task definition
-          TASK_DEF=$(aws ecs describe-task-definition \
+          NEW_IMAGE="${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}"
+
+          # Try to get existing task definition to update
+          if TASK_DEF=$(aws ecs describe-task-definition \
             --task-definition behavior-analyzer-server \
             --query 'taskDefinition' \
-            --output json)
-
-          # Update container image
-          NEW_IMAGE="${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}"
-          NEW_TASK_DEF=$(echo $TASK_DEF | jq \
-            --arg IMAGE "$NEW_IMAGE" \
-            '.containerDefinitions[0].image = $IMAGE |
-             del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)')
+            --output json 2>/dev/null); then
+            echo "Updating existing task definition..."
+            NEW_TASK_DEF=$(echo "$TASK_DEF" | jq \
+              --arg IMAGE "$NEW_IMAGE" \
+              '.containerDefinitions[0].image = $IMAGE |
+               del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)')
+          else
+            echo "Creating initial task definition..."
+            NEW_TASK_DEF=$(cat <<TASKDEF
+          {
+            "family": "behavior-analyzer-server",
+            "networkMode": "awsvpc",
+            "requiresCompatibilities": ["FARGATE"],
+            "cpu": "512",
+            "memory": "1024",
+            "executionRoleArn": "arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/ecsTaskExecutionRole",
+            "containerDefinitions": [{
+              "name": "behavior-analyzer-server",
+              "image": "${NEW_IMAGE}",
+              "essential": true,
+              "portMappings": [
+                {"containerPort": 8080, "protocol": "tcp"},
+                {"containerPort": 9090, "protocol": "tcp"}
+              ],
+              "environment": [
+                {"name": "BA_ENVIRONMENT", "value": "${{ github.event.inputs.environment || 'staging' }}"},
+                {"name": "AWS_REGION", "value": "${{ env.AWS_REGION }}"},
+                {"name": "BA_LOG_LEVEL", "value": "info"}
+              ],
+              "healthCheck": {
+                "command": ["CMD-SHELL", "curl -sf http://localhost:8080/health/ready || exit 1"],
+                "interval": 30,
+                "timeout": 10,
+                "retries": 3,
+                "startPeriod": 10
+              },
+              "logConfiguration": {
+                "logDriver": "awslogs",
+                "options": {
+                  "awslogs-group": "/ecs/behavior-analyzer-server",
+                  "awslogs-region": "${{ env.AWS_REGION }}",
+                  "awslogs-stream-prefix": "ecs"
+                }
+              }
+            }]
+          }
+          TASKDEF
+          )
+          fi
 
           # Register new task definition
           NEW_TASK_ARN=$(aws ecs register-task-definition \
