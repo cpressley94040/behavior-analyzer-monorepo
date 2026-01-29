@@ -8,15 +8,19 @@ on:
   push:
     branches: [main]
     paths:
+      - 'backend'
       - 'backend/**'
       - 'infrastructure/**'
+      - 'kore'
       - 'kore/**'
       - '.github/workflows/deploy-backend.yml'
   pull_request:
     branches: [main]
     paths:
+      - 'backend'
       - 'backend/**'
       - 'infrastructure/**'
+      - 'kore'
       - 'kore/**'
   workflow_dispatch:
     inputs:
