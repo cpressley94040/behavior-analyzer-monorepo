@@ -352,7 +352,30 @@ jobs:
           echo "Waiting for ECS service stability..."
           aws ecs wait services-stable \
             --cluster "$CLUSTER" \
-            --services "$SERVICE"
+            --services "$SERVICE" || true
+
+          # Check service status and recent events
+          echo "=== Service Status ==="
+          aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" \
+            --query 'services[0].{status:status,desired:desiredCount,running:runningCount,pending:pendingCount,events:events[:5]}' \
+            --output json
+
+          # Check for stopped tasks (to see failure reasons)
+          echo "=== Stopped Tasks ==="
+          TASKS=$(aws ecs list-tasks --cluster "$CLUSTER" --service-name "$SERVICE" --desired-status STOPPED --query 'taskArns[:3]' --output text)
+          if [ -n "$TASKS" ] && [ "$TASKS" != "None" ]; then
+            aws ecs describe-tasks --cluster "$CLUSTER" --tasks $TASKS \
+              --query 'tasks[*].{status:lastStatus,reason:stoppedReason,container:containers[0].{name:name,exitCode:exitCode,reason:reason}}' \
+              --output json
+          fi
+
+          # Check running count
+          RUNNING=$(aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" \
+            --query 'services[0].runningCount' --output text)
+          if [ "$RUNNING" -lt 1 ]; then
+            echo "::error::Service failed to reach stable state"
+            exit 1
+          fi
 
   # ============================================================================
   # Verify Deployment Health
