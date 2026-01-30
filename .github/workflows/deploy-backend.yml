@@ -382,19 +382,6 @@ jobs:
             exit 1
           fi
 
-      - name: Publish backend endpoint to Amplify SSM
-        run: |
-          ALB_DNS="${{ steps.stack-outputs.outputs.alb_dns }}"
-          if [ -n "$ALB_DNS" ]; then
-            aws ssm put-parameter \
-              --name "/amplify/d1wf8wk9g5f5af/main/VITE_BACKEND_API_ENDPOINT" \
-              --value "http://${ALB_DNS}" \
-              --type String \
-              --overwrite
-            echo "Published backend endpoint to SSM: http://${ALB_DNS}"
-          else
-            echo "::warning::No ALB DNS available, skipping SSM publish"
-          fi
 
   # ============================================================================
   # Verify Deployment Health
