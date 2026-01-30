@@ -1,4 +1,6 @@
 import * as cdk from 'aws-cdk-lib';
+import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
+import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as ecs from 'aws-cdk-lib/aws-ecs';
 import * as elbv2 from 'aws-cdk-lib/aws-elasticloadbalancingv2';
@@ -108,6 +110,7 @@ export interface ComputeStackProps extends cdk.StackProps {
  */
 export class ComputeStack extends cdk.Stack {
   public readonly cluster: ecs.Cluster;
+  public readonly distribution: cloudfront.Distribution;
   public readonly loadBalancer: elbv2.ApplicationLoadBalancer;
   public readonly logGroup: logs.LogGroup;
 
@@ -308,6 +311,25 @@ export class ComputeStack extends cdk.Stack {
     });
 
     // =========================================================================
+    // CloudFront Distribution
+    // =========================================================================
+    // Provides HTTPS termination via *.cloudfront.net so the Amplify-hosted
+    // frontend (served over HTTPS) can call the backend without mixed-content
+    // errors.  CloudFront connects to the ALB over HTTP.
+
+    this.distribution = new cloudfront.Distribution(this, 'BackendCdn', {
+      defaultBehavior: {
+        origin: new origins.HttpOrigin(this.loadBalancer.loadBalancerDnsName, {
+          protocolPolicy: cloudfront.OriginProtocolPolicy.HTTP_ONLY,
+        }),
+        viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+        allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
+        cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
+        originRequestPolicy: cloudfront.OriginRequestPolicy.ALL_VIEWER,
+      },
+    });
+
+    // =========================================================================
     // Outputs
     // =========================================================================
     //
@@ -352,9 +374,15 @@ export class ComputeStack extends cdk.Stack {
       exportName: `BehaviorAnalyzerLogGroup-${environment}`,
     });
 
+    new cdk.CfnOutput(this, 'BackendApiEndpoint', {
+      value: `https://${this.distribution.distributionDomainName}`,
+      description: 'CloudFront HTTPS endpoint for the backend API',
+      exportName: `BehaviorAnalyzerBackendApiEndpoint-${environment}`,
+    });
+
     new cdk.CfnOutput(this, 'HealthEndpoint', {
-      value: `http://${this.loadBalancer.loadBalancerDnsName}/health/ready`,
-      description: 'Health check endpoint URL',
+      value: `https://${this.distribution.distributionDomainName}/health/ready`,
+      description: 'Health check endpoint URL (via CloudFront)',
     });
 
     new cdk.CfnOutput(this, 'MetricsEndpoint', {

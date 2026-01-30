@@ -402,19 +402,19 @@ jobs:
 
       - name: Verify health endpoint
         run: |
-          ALB_DNS=$(aws cloudformation describe-stacks \
+          BACKEND_URL=$(aws cloudformation describe-stacks \
             --stack-name BehaviorAnalyzerComputeStack \
-            --query 'Stacks[0].Outputs[?OutputKey==`LoadBalancerDns`].OutputValue' \
+            --query 'Stacks[0].Outputs[?OutputKey==`BackendApiEndpoint`].OutputValue' \
             --output text 2>/dev/null || echo "")
 
-          if [ -z "$ALB_DNS" ]; then
-            echo "::warning::No ALB DNS found, skipping health check"
+          if [ -z "$BACKEND_URL" ]; then
+            echo "::warning::No backend API endpoint found, skipping health check"
             exit 0
           fi
 
-          echo "Checking health at http://$ALB_DNS/health/ready"
+          echo "Checking health at $BACKEND_URL/health/ready"
           for i in {1..10}; do
-            if curl -sf "http://$ALB_DNS/health/ready"; then
+            if curl -sf "$BACKEND_URL/health/ready"; then
               echo ""
               echo "Health check passed!"
               exit 0
