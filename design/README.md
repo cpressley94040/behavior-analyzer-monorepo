@@ -71,6 +71,17 @@ Comprehensive design for features identified as gaps in the implementation asses
 - Dark mode theme system
 - Export/Reports (PDF generation)
 
+### [client_fingerprint_extension.md](client_fingerprint_extension.md)
+
+Design for extending the Rust plugin's ClientFingerprint with hardware signals for ban evasion detection.
+
+**Contents:**
+- Available server-side APIs from Rust game assemblies
+- Extended fingerprint structure with composite device hash
+- Collection strategy (OnPlayerSetInfo buffering vs ClientInfo parsing)
+- Backend IdentityDetector integration with DEVICE link type
+- Privacy controls, rollout plan, and risk mitigations
+
 ### [IMPLEMENTATION_ASSESSMENT.md](IMPLEMENTATION_ASSESSMENT.md)
 
 Living document tracking design vs implementation alignment.
